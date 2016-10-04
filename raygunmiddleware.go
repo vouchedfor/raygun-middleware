@@ -7,22 +7,29 @@ import (
 	"github.com/MindscapeHQ/raygun4go"
 )
 
+type ErrorHandler interface {
+	HandleError() error
+}
+
 type Handler struct {
-	AppName string
-	ApiKey  string
-	DevMode bool
+	raygunClient ErrorHandler
+}
+
+func NewHandler(appName, apiKey string, silentMode bool) Handler {
+	raygunClient, err := raygun4go.New(appName, apiKey)
+	if err != nil {
+		log.Println("Unable to create Raygun client:", err.Error())
+	}
+	raygunClient.Silent(silentMode)
+
+	return Handler{
+		raygunClient: raygunClient,
+	}
 }
 
 func (h *Handler) HandleRequest(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if h.DevMode != true {
-			raygun, err := raygun4go.New(h.AppName, h.ApiKey)
-			if err != nil {
-				log.Println("Unable to create Raygun client:", err.Error())
-			}
-
-			defer raygun.HandleError()
-		}
+		defer h.raygunClient.HandleError()
 
 		next.ServeHTTP(w, r)
 	})
